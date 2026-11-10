@@ -1,0 +1,35 @@
+:root { color-scheme: dark; }
+body {
+  width: 290px; margin: 0; padding: 14px 16px 12px;
+  font: 13px/1.4 system-ui, -apple-system, sans-serif;
+  background: #1c1b22; color: #e8e6f0;
+}
+header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+h1 { font-size: 15px; margin: 0; font-weight: 650; }
+.host { margin: 0; color: #9a97a8; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.status { margin: 2px 0 12px; }
+.row {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 9px 0; border-top: 1px solid #2e2c38; cursor: pointer;
+}
+input[role="switch"] {
+  appearance: none; width: 34px; height: 20px; border-radius: 10px; margin: 0;
+  background: #45424f; position: relative; cursor: pointer; transition: background .15s; flex: none;
+}
+input[role="switch"]::after {
+  content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px;
+  border-radius: 50%; background: #fff; transition: transform .15s;
+}
+input[role="switch"]:checked { background: #7b6cf6; }
+input[role="switch"]:checked::after { transform: translateX(14px); }
+input[role="switch"]:disabled { opacity: .4; cursor: default; }
+button {
+  width: 100%; margin: 0 0 10px; padding: 7px; border: 0; border-radius: 7px;
+  background: #7b6cf6; color: #fff; font: inherit; font-weight: 600; cursor: pointer;
+}
+details { border-top: 1px solid #2e2c38; padding-top: 8px; color: #9a97a8; font-size: 12px; }
+summary { cursor: pointer; }
+dl { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; margin: 8px 0 0; }
+dt { margin: 0; } dd { margin: 0; text-align: right; color: #e8e6f0; font-variant-numeric: tabular-nums; }
+footer { margin-top: 10px; color: #77748a; font-size: 11px; }
+kbd { font: inherit; padding: 0 4px; border: 1px solid #45424f; border-radius: 4px; }

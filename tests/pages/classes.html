@@ -1,0 +1,28 @@
+<!doctype html><html><head><meta charset="utf-8"><title>classes</title><style>
+body{background:#f6f7f9;color:#222;font-family:sans-serif}
+.card{background:#ffffff;border:1px solid #e0e0e0;padding:8px;margin:6px}
+.muted{color:#6b7280}
+#hero .title{color:#111827}
+.warn{background:#fff3cd;color:#664d03}
+.btn{background:#0d6efd;color:#ffffff;padding:4px 8px}
+.k{color:#000 !important}
+.lo{color:#d00}
+@media screen and (min-width:100px){.mq{background:#fafafa;color:#333}}
+@layer base{.layered{background:#ffffff;color:#123456}}
+.nest{background:#eef2ff; & .inner{color:#1e3a8a}}
+.grad{background:linear-gradient(#ffffff,#eeeeee);color:#111}
+.withimg{background:#ffffff url(data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==);color:#222}
+</style></head><body>
+<div class="card"><span class="muted">muted text</span></div>
+<div id="hero"><h1 class="title">hero title</h1></div>
+<div class="warn">warning box</div>
+<span class="btn">primary button</span>
+<p class="k lo">important beats later</p>
+<div class="mq">media query rule</div>
+<div class="layered">layered rule</div>
+<div class="nest"><span class="inner">nested rule</span></div>
+<div class="grad">gradient box</div>
+<div class="withimg">image background keeps colours</div>
+<p>plain paragraph</p>
+<img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHdpZHRoPScyMCcgaGVpZ2h0PScyMCc+PHJlY3Qgd2lkdGg9JzIwJyBoZWlnaHQ9JzIwJyBmaWxsPSdyZWQnLz48L3N2Zz4=" id="photo">
+</body></html>

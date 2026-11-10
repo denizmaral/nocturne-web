@@ -1,0 +1,35 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header>
+    <img src="../icons/icon-48.png" alt="" width="28" height="28">
+    <h1>Nocturne Web</h1>
+  </header>
+
+  <p id="host" class="host"></p>
+  <p id="status" class="status">Checking this page…</p>
+
+  <label class="row" id="site-row">
+    <span>Dark mode on this site</span>
+    <input type="checkbox" id="site" role="switch">
+  </label>
+  <button id="force" hidden>Darken anyway</button>
+
+  <label class="row">
+    <span>Enabled on all sites</span>
+    <input type="checkbox" id="global" role="switch">
+  </label>
+
+  <details id="details" hidden>
+    <summary>Details</summary>
+    <dl id="stats"></dl>
+  </details>
+
+  <footer>Shortcut for this site: <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>D</kbd></footer>
+  <script src="popup.js"></script>
+</body>
+</html>

@@ -1,0 +1,66 @@
+{
+  "manifest_version": 3,
+  "name": "Nocturne Web",
+  "version": "0.1.0",
+  "description": "Dark mode for every website that keeps colours, brand colours and images looking right.",
+  "author": "Deniz Maral",
+  "homepage_url": "https://github.com/denizmaral/nocturne-web",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "nocturne-web@denizmaral.github.io",
+      "strict_min_version": "128.0",
+      "data_collection_permissions": {
+        "required": [
+          "none"
+        ]
+      }
+    }
+  },
+  "icons": {
+    "48": "icons/icon-48.png",
+    "96": "icons/icon-96.png",
+    "128": "icons/icon-128.png"
+  },
+  "permissions": [
+    "storage"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "scripts": [
+      "src/background.js"
+    ]
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "src/color.js",
+        "src/engine.js",
+        "src/content.js"
+      ],
+      "run_at": "document_start",
+      "all_frames": true,
+      "match_about_blank": true
+    }
+  ],
+  "action": {
+    "default_title": "Nocturne Web",
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png"
+    }
+  },
+  "commands": {
+    "toggle-site": {
+      "suggested_key": {
+        "default": "Alt+Shift+D"
+      },
+      "description": "Turn dark mode off or on for the current site"
+    }
+  }
+}

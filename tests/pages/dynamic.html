@@ -1,0 +1,9 @@
+<!doctype html><html><head><meta charset="utf-8"><title>dynamic</title><style>body{background:#fff;color:#111}</style></head><body>
+<p class="later">styled by a style element added later</p>
+<p class="cssinjs">styled by insertRule</p>
+<div id="slot"></div>
+<script>
+setTimeout(() => { const s = document.createElement("style"); s.textContent = ".later{background:#e8f0fe;color:#174ea6}"; document.head.appendChild(s); }, 400);
+setTimeout(() => { const s = document.createElement("style"); document.head.appendChild(s); s.sheet.insertRule(".cssinjs{background:#fce8e6;color:#a50e0e}"); }, 700);
+setTimeout(() => { document.getElementById("slot").innerHTML = '<div style="background:#ffffff;color:#202124">added later inline</div>'; }, 900);
+</script></body></html>

@@ -1,0 +1,4 @@
+@import url("cross-import.css");
+body{background:#fafafa;color:#202124}
+.x-card{background:#ffffff;border:1px solid #dadce0;padding:6px}
+.x-text{color:#3c4043}

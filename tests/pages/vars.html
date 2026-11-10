@@ -1,0 +1,23 @@
+<!doctype html><html><head><meta charset="utf-8"><title>vars</title><style>
+:root{--bg:#ffffff;--fg:#1f2328;--muted:#59636e;--border:#d1d9e0;--accent:var(--brand);--brand:#0969da;
+  --tw-bg:255 255 255;--tw-text:17 24 39;--card:0 0% 100%;--card-fg:222.2 84% 4.9%;--both:#f0f0f0}
+body{background:var(--bg);color:var(--fg);font-family:sans-serif}
+.muted{color:var(--muted)}
+.box{border:1px solid var(--border);background:var(--both);color:var(--fg);margin:4px}
+.link{color:var(--accent)}
+.tw{background-color:rgb(var(--tw-bg) / 1);color:rgb(var(--tw-text))}
+.cn{background:hsl(var(--card));color:hsl(var(--card-fg))}
+.fb{color:var(--undefined-var, #333333)}
+.both{color:var(--both);background:#222}
+.scoped{--bg:#fff8e1}
+.scoped .inner{background:var(--bg);color:var(--fg)}
+</style></head><body>
+<p class="muted">muted via var</p>
+<div class="box">box with var border</div>
+<p class="link">accent via chain</p>
+<div class="tw">tailwind channels</div>
+<div class="cn">shadcn hsl channels</div>
+<p class="fb">fallback colour</p>
+<p class="both">var used as text</p>
+<div class="scoped"><div class="inner">scoped redefinition</div></div>
+</body></html>
