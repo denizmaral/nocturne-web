@@ -16,7 +16,7 @@ sys.path.insert(0, HERE)
 import server
 
 BROWSER = sys.argv[1] if len(sys.argv) > 1 else "/Applications/Zen.app/Contents/MacOS/zen"
-PAGES = {"scheme": 1.5, "classes": 1.5, "vars": 1.5, "cross": 2.0, "inline": 1.5, "dark": 1.5, "dynamic": 3.5, "csp": 1.5}
+PAGES = {"shadow": 2.5, "scheme": 1.5, "classes": 1.5, "vars": 1.5, "cross": 2.0, "inline": 1.5, "dark": 1.5, "dynamic": 3.5, "csp": 1.5}
 COLLECT = open(os.path.join(HERE, "collect.js")).read()
 COLOR_JS = open(os.path.join(ROOT, "src", "color.js")).read()
 

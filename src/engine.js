@@ -264,9 +264,9 @@
         const inner = rule.cssRules && rule.cssRules.length ? copyRules(rule.cssRules, true, out) : "";
         if (!decls.length && !inner) continue;
         out.stats.rules++;
-        css += `${nested ? rule.selectorText : scoped(rule.selectorText)}{${decls.join(";")}${decls.length ? ";" : ""}${inner}}`;
+        css += `${nested ? rule.selectorText : out.scope(rule.selectorText)}{${decls.join(";")}${decls.length ? ";" : ""}${inner}}`;
         // A body background normally fills the window; our root default would stop that.
-        if (!nested && rule.selectorText.trim().toLowerCase() === "body") {
+        if (!nested && out.mirrorBody && rule.selectorText.trim().toLowerCase() === "body") {
           const bg = decls.find((d) => d.startsWith("background-color:"));
           if (bg) out.root += `${GATE}{${bg.replace(" !important", "")}}`;
         }
@@ -300,9 +300,16 @@
     return new Color(fg.r * fg.a + bg.r * (1 - fg.a), fg.g * fg.a + bg.g * (1 - fg.a), fg.b * fg.a + bg.b * (1 - fg.a));
   }
 
+  function composedParent(e) {
+    if (e.assignedSlot) return e.assignedSlot;
+    if (e.parentElement) return e.parentElement;
+    const root = e.getRootNode();
+    return root && root.host ? root.host : null;
+  }
+
   /** The colour behind an element, or null if a background image is in the way. */
   function backgroundBehind(el, win) {
-    for (let e = el; e && e.nodeType === 1; e = e.parentElement) {
+    for (let e = el; e && e.nodeType === 1; e = composedParent(e)) {
       const cs = win.getComputedStyle(e);
       if (cs.backgroundImage && cs.backgroundImage !== "none") {
         if (!/gradient\(/i.test(cs.backgroundImage)) return null;
@@ -319,16 +326,28 @@
   // ---------------------------------------------------------------------------------------
   // Engine
 
+  let nextId = 1;
+
+  /**
+   * Darkens one styling scope: the document, or the shadow root of a web component (whose
+   * styles the document's stylesheets can't reach). The document's engine finds shadow roots
+   * and runs a child engine for each. Inside a shadow root there is no <html> to gate on, so
+   * the dark copies go into an adopted stylesheet that is added last and removed when off.
+   */
   class Engine {
-    constructor(doc, fetchCSS) {
-      this.doc = doc;
-      this.win = doc.defaultView;
+    constructor(root, fetchCSS, { shadow = false } = {}) {
+      this.root = root;
+      this.shadow = shadow;
+      this.doc = shadow ? root.ownerDocument : root;
+      this.win = this.doc.defaultView;
       this.fetchCSS = fetchCSS;
+      this.children = new Map();         // shadow root -> Engine
+      this.ownSheets = {};               // shadow scopes: our adopted stylesheets
+      this.ownCss = {};
       this.sheetCache = new WeakMap();   // sheet -> { count, out }
       this.fetchedCache = new Map();     // href -> out
       this.elements = new Map();         // id -> { ref, css }
       this.elementIds = new WeakMap();
-      this.nextId = 1;
       this.fixes = new Map();
       this.svgColours = new WeakMap();
       this.stats = { rules: 0, variables: 0, dropped: 0 };
@@ -336,7 +355,12 @@
       this.status = { state: "idle" };
     }
 
-    newOut() { return { root: "", imports: [], stats: { rules: 0, variables: 0, dropped: 0 } }; }
+    newOut() {
+      return {
+        root: "", imports: [], stats: { rules: 0, variables: 0, dropped: 0 },
+        scope: this.shadow ? (s) => s : scoped, mirrorBody: !this.shadow,
+      };
+    }
 
     /** True if the page already has a dark background where people look. */
     looksDark() {
@@ -413,11 +437,12 @@
 
     sheets() {
       const list = [];
-      for (const s of this.doc.styleSheets) {
+      for (const s of this.root.styleSheets) {
         if (s.ownerNode && (s.ownerNode.id === STYLE_ID || s.ownerNode.id === DYNAMIC_ID)) continue;
         list.push(s);
       }
-      try { for (const s of this.doc.adoptedStyleSheets || []) list.push(s); } catch (e) { /* not supported */ }
+      const mine = Object.values(this.ownSheets);
+      try { for (const s of this.root.adoptedStyleSheets || []) if (!mine.includes(s)) list.push(s); } catch (e) { /* not supported */ }
       return list;
     }
 
@@ -474,11 +499,11 @@
         return true;
       }
       if (!id) {
-        id = this.nextId++;
+        id = nextId++;
         this.elementIds.set(el, id);
         el.setAttribute(ID_ATTR, String(id));
       }
-      const css = `:where(${GATE} [${ID_ATTR}="${id}"]){${decls.join(";")}}`;
+      const css = this.shadow ? `:where([${ID_ATTR}="${id}"]){${decls.join(";")}}` : `:where(${GATE} [${ID_ATTR}="${id}"]){${decls.join(";")}}`;
       const old = this.elements.get(id);
       if (old && old.css === css) return false;
       this.elements.set(id, { ref: new WeakRef(el), css });
@@ -513,7 +538,7 @@
       this.status.sheets = sheets;
       Object.assign(this.status, this.stats);
       this.status.buildMs = Math.round(performance.now() - started);
-      return `@media screen{${BASE}${root}${css}}`;
+      return `@media screen{${this.shadow ? "" : BASE}${root}${css}}`;
     }
 
     /** Overrides for inline styles and colour attributes, and readability fixes (changes often). */
@@ -529,6 +554,13 @@
     }
 
     setStyle(id, css) {
+      if (this.shadow) {
+        let sheet = this.ownSheets[id];
+        if (!sheet) sheet = this.ownSheets[id] = new this.win.CSSStyleSheet();
+        if (this.ownCss[id] !== css) { sheet.replaceSync(css); this.ownCss[id] = css; }
+        this.adoptOwnSheets();
+        return;
+      }
       let el = this.doc.getElementById(id);
       if (!el) {
         el = this.doc.createElement("style");
@@ -536,6 +568,39 @@
       }
       if (!el.isConnected) this.doc.documentElement.appendChild(el);
       if (el.textContent !== css) el.textContent = css;
+    }
+
+    /** Keeps our sheets last in the shadow root's adopted stylesheets (components may reset them). */
+    adoptOwnSheets() {
+      const mine = [STYLE_ID, DYNAMIC_ID].map((id) => this.ownSheets[id]).filter(Boolean);
+      const list = [...this.root.adoptedStyleSheets];
+      const tail = list.slice(list.length - mine.length);
+      if (tail.length === mine.length && tail.every((s, i) => s === mine[i])) return;
+      this.root.adoptedStyleSheets = [...list.filter((s) => !mine.includes(s)), ...mine];
+    }
+
+    /** Starts a child engine for every shadow root under `node` that doesn't have one yet. */
+    discoverShadows(node) {
+      if (!node.querySelectorAll) return;
+      const visit = (el) => {
+        const sr = el.openOrClosedShadowRoot || el.shadowRoot;  // openOrClosedShadowRoot: Firefox extensions only
+        if (!sr || this.children.has(sr)) return;
+        const child = new Engine(sr, this.fetchCSS, { shadow: true });
+        this.children.set(sr, child);
+        child.start({ force: true });
+      };
+      if (node.nodeType === 1) visit(node);
+      for (const el of node.querySelectorAll("*")) visit(el);
+      for (const [sr, child] of this.children) {
+        if (!sr.host || !sr.host.isConnected) { child.stop(); this.children.delete(sr); }
+      }
+      this.status.shadowRoots = this.countShadowRoots();
+    }
+
+    countShadowRoots() {
+      let n = 0;
+      for (const child of this.children.values()) n += 1 + child.countShadowRoots();
+      return n;
     }
 
     async apply() {
@@ -549,7 +614,7 @@
         this.dynamicDirty = false;
         this.setStyle(DYNAMIC_ID, this.buildDynamic());
       }
-      if (this.active && !this.doc.documentElement.hasAttribute(GATE_ATTR)) this.doc.documentElement.setAttribute(GATE_ATTR, "");
+      if (this.active && !this.shadow && !this.doc.documentElement.hasAttribute(GATE_ATTR)) this.doc.documentElement.setAttribute(GATE_ATTR, "");
     }
 
     schedule({ sheets = false, dynamic = false } = {}, delay = 80) {
@@ -564,7 +629,7 @@
 
     async start({ force = false } = {}) {
       if (this.active) return;
-      if (!force && this.looksDark()) {
+      if (!force && !this.shadow && this.looksDark()) {
         this.status = { state: "already-dark" };
         return;
       }
@@ -572,11 +637,12 @@
       this.status = { state: "active" };
       this.svgColours = new WeakMap();
       this.stats = { rules: 0, variables: 0, dropped: 0 };
-      this.scanElements(this.doc.documentElement);
+      this.scanElements(this.shadow ? this.root : this.doc.documentElement);
       this.sheetsDirty = this.dynamicDirty = true;
       await this.apply();
+      this.discoverShadows(this.root);
       this.observe();
-      this.scheduleSafetyNet(250);
+      if (!this.shadow) this.scheduleSafetyNet(250);
     }
 
     stop(state = "off") {
@@ -585,9 +651,17 @@
       clearTimeout(this.netTimer);
       clearInterval(this.poll);
       if (this.observer) this.observer.disconnect();
-      this.doc.documentElement.removeAttribute(GATE_ATTR);
-      for (const id of [STYLE_ID, DYNAMIC_ID]) { const el = this.doc.getElementById(id); if (el) el.remove(); }
-      for (const el of this.doc.querySelectorAll(`[${ID_ATTR}],[${FIX_ATTR}]`)) { el.removeAttribute(ID_ATTR); el.removeAttribute(FIX_ATTR); }
+      for (const child of this.children.values()) child.stop();
+      this.children.clear();
+      if (this.shadow) {
+        const mine = Object.values(this.ownSheets);
+        try { this.root.adoptedStyleSheets = [...this.root.adoptedStyleSheets].filter((s) => !mine.includes(s)); } catch (e) { /* gone */ }
+        this.ownSheets = {}; this.ownCss = {};
+      } else {
+        this.doc.documentElement.removeAttribute(GATE_ATTR);
+        for (const id of [STYLE_ID, DYNAMIC_ID]) { const el = this.doc.getElementById(id); if (el) el.remove(); }
+      }
+      for (const el of this.root.querySelectorAll(`[${ID_ATTR}],[${FIX_ATTR}]`)) { el.removeAttribute(ID_ATTR); el.removeAttribute(FIX_ATTR); }
       this.elements.clear();
       this.elementIds = new WeakMap();
       this.fixes.clear();
@@ -616,6 +690,7 @@
               if (n.nodeType !== 1 || ours(n)) continue;
               if (isSheetNode(n) || n.querySelector("style,link[rel~=stylesheet]")) sheets = true;
               if (this.scanElements(n)) dynamic = true;
+              this.discoverShadows(n);
             }
             for (const n of r.removedNodes) {
               if (ours(n)) { sheets = dynamic = true; continue; }
@@ -625,18 +700,20 @@
         }
         if (sheets || dynamic) this.schedule({ sheets, dynamic });
       });
-      this.observer.observe(this.doc, {
+      this.observer.observe(this.root, {
         childList: true, subtree: true, characterData: true, attributes: true,
         attributeFilter: ["style", "bgcolor", "color", "text", "fill", "stroke", GATE_ATTR],
       });
       if (!this.listening) {
         this.listening = true;
         // Stylesheets that finish loading after we started.
-        this.doc.addEventListener("load", (e) => { if (this.active && e.target.localName === "link") this.schedule({ sheets: true }); }, true);
+        this.root.addEventListener("load", (e) => { if (this.active && e.target.localName === "link") this.schedule({ sheets: true }); }, true);
       }
       // Rules added with insertRule() (CSS-in-JS) don't show up as DOM mutations.
       this.poll = setInterval(() => {
         if (!this.active) return;
+        if (!this.shadow || this.root.host.isConnected) this.discoverShadows(this.root);
+        if (this.shadow && Object.keys(this.ownSheets).length) this.adoptOwnSheets();
         for (const sheet of this.sheets()) {
           let count;
           try { count = sheet.cssRules.length; } catch (e) { continue; }
@@ -658,7 +735,7 @@
      * couldn't convert) and gives it a readable colour.
      */
     safetyNet() {
-      if (!this.active || !this.doc.body) return;
+      if (!this.active || this.shadow || !this.doc.body) return;
       const { doc, win } = this;
       const walker = doc.createTreeWalker(doc.body, win.NodeFilter.SHOW_TEXT);
       const seen = new Set();
@@ -678,7 +755,7 @@
         const bg = backgroundBehind(el, win);
         if (!bg) continue;
         if (contrast(blend(fg, bg), bg) >= 2) continue;
-        const id = this.nextId++;
+        const id = nextId++;
         el.setAttribute(FIX_ATTR, String(id));
         const target = bg.luminance < 0.2 ? fg.adjusted("text").css() : "#1a1a1a";
         this.fixes.set(id, `${GATE} [${FIX_ATTR}="${id}"]{color:${target} !important;-webkit-text-fill-color:${target} !important}`);

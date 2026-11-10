@@ -47,7 +47,8 @@ Regular Firefox only installs extensions signed by Mozilla, except in its Develo
 
 - Dark logos and text inside images on transparent backgrounds can be hard to see on a dark background.
 - Parts of a page that sit on a background image keep their original colours, because Nocturne Web can't tell how light the image is.
-- Styles inside web components (shadow DOM) and colours drawn on a canvas aren't converted yet.
+- Colours drawn on a canvas aren't converted.
+- The readability check doesn't yet look inside web components (shadow DOM), although their styles are darkened like the rest of the page.
 - Browser pages such as `about:` pages and add-on stores can't be changed by any extension.
 
 ## Development
@@ -58,7 +59,7 @@ python3 tests/run.py                   # end-to-end tests in headless Zen (needs
 ./scripts/build.sh                     # builds dist/nocturne-web-<version>.xpi
 ```
 
-The end-to-end tests load each page in `tests/pages` twice, without and with the extension. Every piece of text must come out as the exact dark version of its original colours (`src/color.js`), stay readable, and images must stay untouched. The pages cover CSS variables (including channel-style variables like Tailwind's and shadcn/ui's), stylesheets from other domains, `@import`, `@layer`, nested CSS, inline styles, SVG, styles added later by scripts, and strict Content Security Policies.
+The end-to-end tests load each page in `tests/pages` twice, without and with the extension. Every piece of text must come out as the exact dark version of its original colours (`src/color.js`), stay readable, and images must stay untouched. The pages cover web components (open, closed, nested, late-defined and slotted), CSS variables (including channel-style variables like Tailwind's and shadcn/ui's), stylesheets from other domains, `@import`, `@layer`, nested CSS, inline styles, SVG, styles added later by scripts, and strict Content Security Policies.
 
 ## Disclaimer
 

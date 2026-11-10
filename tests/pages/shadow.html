@@ -1,0 +1,22 @@
+<!doctype html><html><head><meta charset="utf-8"><title>shadow</title><style>body{background:#fff;color:#111}</style></head><body>
+<x-nav></x-nav>
+<x-closed></x-closed>
+<x-card><span>slotted text</span></x-card>
+<x-late></x-late>
+<p>light DOM text</p>
+<script>
+window.__closedRoots = [];
+customElements.define("x-inner", class extends HTMLElement { constructor() { super();
+  const r = this.attachShadow({ mode: "open" }); r.innerHTML = '<style>.inner{background:#eeeeff;color:#123456}</style><div class="inner">nested component</div>'; } });
+customElements.define("x-nav", class extends HTMLElement { constructor() { super();
+  const r = this.attachShadow({ mode: "open" });
+  r.innerHTML = '<style>:host{display:block}.bar{background:#f2f2f2;color:#1d1d1f;padding:8px}.bar a{color:#0066cc}</style><nav class="bar">Apps <a href="#">Reports</a></nav><x-inner></x-inner>'; } });
+customElements.define("x-closed", class extends HTMLElement { constructor() { super();
+  const r = this.attachShadow({ mode: "closed" }); window.__closedRoots.push(r);
+  const sheet = new CSSStyleSheet(); sheet.replaceSync(".panel{background:#ffffff;color:#333333;padding:8px}"); r.adoptedStyleSheets = [sheet];
+  r.innerHTML = '<div class="panel">closed component</div>'; } });
+customElements.define("x-card", class extends HTMLElement { constructor() { super();
+  const r = this.attachShadow({ mode: "open" }); r.innerHTML = '<style>.c{background:#ffffff;color:#222222;padding:8px}</style><div class="c"><slot></slot></div>'; } });
+setTimeout(() => customElements.define("x-late", class extends HTMLElement { connectedCallback() {
+  const r = this.attachShadow({ mode: "open" }); r.innerHTML = '<style>.late{background:#fff8e1;color:#5c4400}</style><div class="late">component defined later</div>'; } }), 600);
+</script></body></html>
