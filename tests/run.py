@@ -16,7 +16,7 @@ sys.path.insert(0, HERE)
 import server
 
 BROWSER = sys.argv[1] if len(sys.argv) > 1 else "/Applications/Zen.app/Contents/MacOS/zen"
-PAGES = {"classes": 1.5, "vars": 1.5, "cross": 2.0, "inline": 1.5, "dark": 1.5, "dynamic": 3.5, "csp": 1.5}
+PAGES = {"scheme": 1.5, "classes": 1.5, "vars": 1.5, "cross": 2.0, "inline": 1.5, "dark": 1.5, "dynamic": 3.5, "csp": 1.5}
 COLLECT = open(os.path.join(HERE, "collect.js")).read()
 COLOR_JS = open(os.path.join(ROOT, "src", "color.js")).read()
 
@@ -72,7 +72,11 @@ ADJ = AFTER.pop("_adjust")
 failures = 0
 for page in PAGES:
     b, a, issues = BEFORE[page], AFTER[page], []
-    if page == "dark":
+    if page == "scheme":
+        # Forced light colour schemes must end up dark (light-dark() and system colours).
+        for r in a["runs"]:
+            if lum(r["bg"]) > 0.05 or lum(r["fg"]) < 0.5: issues.append(f"'{r['t']}': still light (bg {r['bg'][:3]}, fg {r['fg'][:3]})")
+    elif page == "dark":
         if a["gate"]: issues.append("already-dark page was darkened")
         if [r["fg"] for r in a["runs"]] != [r["fg"] for r in b["runs"]]: issues.append("already-dark page colours changed")
     else:

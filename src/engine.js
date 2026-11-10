@@ -224,6 +224,13 @@
         }
         continue;
       }
+      if (prop === "color-scheme") {
+        // An element that forces a light scheme would keep light-dark() colours and system
+        // colours (Canvas, CanvasText...) light: give it the dark scheme too.
+        const v = style.getPropertyValue(prop);
+        if (/\blight\b/i.test(v) && !/\bdark\b/i.test(v)) decls.push(`color-scheme:dark${imp(prop)}`);
+        continue;
+      }
       const role = ROLE[prop];
       if (!role) continue;
       const value = style.getPropertyValue(prop);

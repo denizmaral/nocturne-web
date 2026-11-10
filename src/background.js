@@ -14,7 +14,8 @@ async function fetchCSS(url) {
     // other sites' private data.
     const res = await fetch(url, { credentials: "omit", cache: "force-cache" });
     const type = res.headers.get("content-type") || "";
-    if (res.ok && /\bcss\b/i.test(type)) {
+    const looksLikeCSS = /\bcss\b/i.test(type) || (/^(text\/plain|application\/octet-stream)?\b/i.test(type) && /\.css(?:$|\?)/i.test(new URL(res.url).pathname + new URL(res.url).search));
+    if (res.ok && looksLikeCSS && !/html|javascript|json/i.test(type)) {
       const body = await res.text();
       if (body.length <= MAX_CSS_BYTES) text = body;
     }

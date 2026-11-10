@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Nocturne Web",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Dark mode for every website that keeps colours, brand colours and images looking right.",
   "author": "Deniz Maral",
   "homepage_url": "https://github.com/denizmaral/nocturne-web",
