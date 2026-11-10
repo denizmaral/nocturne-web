@@ -16,7 +16,7 @@ sys.path.insert(0, HERE)
 import server
 
 BROWSER = sys.argv[1] if len(sys.argv) > 1 else "/Applications/Zen.app/Contents/MacOS/zen"
-PAGES = {"shadow": 2.5, "scheme": 1.5, "classes": 1.5, "vars": 1.5, "cross": 2.0, "inline": 1.5, "dark": 1.5, "dynamic": 3.5, "csp": 1.5}
+PAGES = {"latency": 2.5, "shadow": 2.5, "scheme": 1.5, "classes": 1.5, "vars": 1.5, "cross": 2.0, "inline": 1.5, "dark": 1.5, "dynamic": 3.5, "csp": 1.5}
 COLLECT = open(os.path.join(HERE, "collect.js")).read()
 COLOR_JS = open(os.path.join(ROOT, "src", "color.js")).read()
 
@@ -91,6 +91,9 @@ for page in PAGES:
             if not rb["link"] and not close(ra["fg"], exp["fg"]): issues.append(f"'{t}': fg {ra['fg'][:3]} expected {exp['fg'][:3]} (was {rb['fg'][:3]})")
             cb, ca = contrast(rb["fg"], rb["bg"]), contrast(ra["fg"], ra["bg"])
             if ca < 4.5 and ca < cb - 0.5: issues.append(f"'{t}': contrast {cb:.1f} -> {ca:.1f}")
+    if a.get("placeholder"): issues.append("placeholder still present after start")
+    if page == "latency":
+        if a["frames"] not in ("0", "1"): issues.append(f"insertRule content took {a['frames']} frames to turn dark (want 0-1)")
     if page == "inline":
         if not close(a["icon"], ADJ["_icon"]): issues.append(f"icon fill {a['icon']} expected {ADJ['_icon']}")
         if a["art"] != b["art"]: issues.append("multi-colour SVG illustration was recoloured")

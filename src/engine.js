@@ -17,6 +17,8 @@
   const FIX_ATTR = "data-nw-fix";
   const STYLE_ID = "nocturne-web";
   const DYNAMIC_ID = "nocturne-web-elements";
+  const PLACEHOLDER_ID = "nocturne-web-placeholder";
+  const OWN_IDS = new Set([STYLE_ID, DYNAMIC_ID, PLACEHOLDER_ID]);
 
   // Longhands we darken, and the role of their colours.
   const ROLE = {
@@ -252,21 +254,43 @@
     return decls;
   }
 
+  // Converted copies of top-level rules, per rule object (separately for the document and for
+  // shadow roots, whose selectors are written differently). CSS-in-JS libraries add rules one
+  // at a time; this keeps re-copying their sheet cheap.
+  const ruleCache = { document: new WeakMap(), shadow: new WeakMap() };
+
   function copyRules(rules, nested, out) {
     let css = "";
+    const cache = out.mirrorBody ? ruleCache.document : ruleCache.shadow;
     for (const rule of rules) {
+      if (!nested && "selectorText" in rule) {
+        const hit = cache.get(rule);
+        if (hit) {
+          css += hit.css; out.root += hit.root;
+          out.stats.rules += hit.rules; out.stats.variables += hit.variables; out.stats.dropped += hit.dropped;
+          continue;
+        }
+        const before = { css: css.length, root: out.root.length, ...out.stats };
+        css += copyRules([rule], true, { ...out, topLevel: true, stats: out.stats, set root(v) { out.root = v; }, get root() { return out.root; } });
+        cache.set(rule, {
+          css: css.slice(before.css), root: out.root.slice(before.root),
+          rules: out.stats.rules - before.rules, variables: out.stats.variables - before.variables, dropped: out.stats.dropped - before.dropped,
+        });
+        continue;
+      }
       if (nested && !("selectorText" in rule) && rule.style && !("cssRules" in rule)) {
         // Declarations directly inside a nested @media (CSSNestedDeclarations).
         const decls = darkDeclarations(rule.style, out.stats, false);
         if (decls.length) css += decls.join(";") + ";";
       } else if ("selectorText" in rule && rule.style) {
         const decls = darkDeclarations(rule.style, out.stats, false);
-        const inner = rule.cssRules && rule.cssRules.length ? copyRules(rule.cssRules, true, out) : "";
+        const inner = rule.cssRules && rule.cssRules.length ? copyRules(rule.cssRules, true, { ...out, topLevel: false, stats: out.stats, set root(v) { out.root = v; }, get root() { return out.root; } }) : "";
         if (!decls.length && !inner) continue;
         out.stats.rules++;
-        css += `${nested ? rule.selectorText : out.scope(rule.selectorText)}{${decls.join(";")}${decls.length ? ";" : ""}${inner}}`;
+        const top = !nested || out.topLevel;
+        css += `${top ? out.scope(rule.selectorText) : rule.selectorText}{${decls.join(";")}${decls.length ? ";" : ""}${inner}}`;
         // A body background normally fills the window; our root default would stop that.
-        if (!nested && out.mirrorBody && rule.selectorText.trim().toLowerCase() === "body") {
+        if (top && out.mirrorBody && rule.selectorText.trim().toLowerCase() === "body") {
           const bg = decls.find((d) => d.startsWith("background-color:"));
           if (bg) out.root += `${GATE}{${bg.replace(" !important", "")}}`;
         }
@@ -342,6 +366,7 @@
       this.win = this.doc.defaultView;
       this.fetchCSS = fetchCSS;
       this.children = new Map();         // shadow root -> Engine
+      this.waitingFor = new Set();       // custom element names we wait to be defined
       this.ownSheets = {};               // shadow scopes: our adopted stylesheets
       this.ownCss = {};
       this.sheetCache = new WeakMap();   // sheet -> { count, out }
@@ -438,7 +463,7 @@
     sheets() {
       const list = [];
       for (const s of this.root.styleSheets) {
-        if (s.ownerNode && (s.ownerNode.id === STYLE_ID || s.ownerNode.id === DYNAMIC_ID)) continue;
+        if (s.ownerNode && OWN_IDS.has(s.ownerNode.id)) continue;  // ours, including the placeholder
         list.push(s);
       }
       const mine = Object.values(this.ownSheets);
@@ -525,9 +550,10 @@
       const started = performance.now();
       this.stats = { rules: 0, variables: 0, dropped: 0 };
       let root = "", css = "", sheets = 0;
-      for (const sheet of this.sheets()) {
-        if (sheet.disabled) continue;
-        const out = await this.copySheet(sheet);
+      const list = this.sheets().filter((sheet) => !sheet.disabled);
+      const outs = await Promise.all(list.map((sheet) => this.copySheet(sheet)));
+      for (let i = 0; i < list.length; i++) {
+        const sheet = list[i], out = outs[i];
         if (!out) continue;
         sheets++;
         root += out.root;
@@ -591,6 +617,19 @@
       };
       if (node.nodeType === 1) visit(node);
       for (const el of node.querySelectorAll("*")) visit(el);
+      try {
+        for (const el of node.querySelectorAll(":not(:defined)")) {
+          const name = el.localName;
+          // Wait once per name. An element whose definition exists but failed to upgrade
+          // stays ":not(:defined)" forever; waiting again would resolve at once, every time.
+          if (this.waitingFor.has(name) || this.win.customElements.get(name)) continue;
+          this.waitingFor.add(name);
+          this.win.customElements.whenDefined(name).then(() => {
+            this.waitingFor.delete(name);
+            if (this.active) this.discoverShadows(this.root);
+          });
+        }
+      } catch (e) { /* no custom elements here */ }
       for (const [sr, child] of this.children) {
         if (!sr.host || !sr.host.isConnected) { child.stop(); this.children.delete(sr); }
       }
@@ -614,24 +653,48 @@
         this.dynamicDirty = false;
         this.setStyle(DYNAMIC_ID, this.buildDynamic());
       }
-      if (this.active && !this.shadow && !this.doc.documentElement.hasAttribute(GATE_ATTR)) this.doc.documentElement.setAttribute(GATE_ATTR, "");
+      if (this.active && !this.shadow && !this.doc.documentElement.hasAttribute(GATE_ATTR)) {
+        this.doc.documentElement.setAttribute(GATE_ATTR, "");
+        this.dropPlaceholder();  // the real dark styles are in place now
+        if (this.status.darkAtMs === undefined) this.status.darkAtMs = Math.round(performance.now());
+      }
     }
 
-    schedule({ sheets = false, dynamic = false } = {}, delay = 80) {
+    /**
+     * Re-applies on the next microtask: after the current script or DOM change but before the
+     * browser paints, so new content never shows up light.
+     */
+    schedule({ sheets = false, dynamic = false } = {}) {
       if (sheets) this.sheetsDirty = true;
       if (dynamic) this.dynamicDirty = true;
-      if (this.timer) return;
-      this.timer = setTimeout(() => {
-        this.timer = null;
-        this.apply().then(() => { if (sheets) this.scheduleSafetyNet(); });
-      }, delay);
+      if (this.queued || !this.active) return;
+      this.queued = true;
+      queueMicrotask(() => {
+        this.queued = false;
+        if (this.active) this.apply();
+      });
     }
 
-    async start({ force = false } = {}) {
+    /** Called by the page hooks whenever a stylesheet changes through the CSSOM. */
+    notifyStylesChanged() {
+      if (!this.active) return;
+      this.schedule({ sheets: true });
+      for (const child of this.children.values()) child.notifyStylesChanged();
+    }
+
+    async start({ force = false, placeholder = null } = {}) {
       if (this.active) return;
-      if (!force && !this.shadow && this.looksDark()) {
-        this.status = { state: "already-dark" };
-        return;
+      if (!this.shadow) {
+        // Look at the page without our placeholder (same task, so nothing paints in between).
+        if (placeholder) placeholder.media = "not all";
+        const dark = !force && this.looksDark();
+        if (placeholder) placeholder.media = "screen";
+        this.placeholder = placeholder;
+        if (dark) {
+          this.dropPlaceholder();
+          this.status = { state: "already-dark" };
+          return;
+        }
       }
       this.active = true;
       this.status = { state: "active" };
@@ -642,12 +705,16 @@
       await this.apply();
       this.discoverShadows(this.root);
       this.observe();
-      if (!this.shadow) this.scheduleSafetyNet(250);
+      if (!this.shadow) this.scheduleSafetyNet(300);
+    }
+
+    dropPlaceholder() {
+      if (this.placeholder) { this.placeholder.remove(); this.placeholder = null; }
     }
 
     stop(state = "off") {
       this.active = false;
-      clearTimeout(this.timer); this.timer = null;
+      this.dropPlaceholder();
       clearTimeout(this.netTimer);
       clearInterval(this.poll);
       if (this.observer) this.observer.disconnect();
@@ -670,9 +737,9 @@
 
     observe() {
       const isSheetNode = (n) => n.nodeType === 1 && (n.localName === "style" || (n.localName === "link" && /stylesheet/i.test(n.rel || "")));
-      const ours = (n) => n.nodeType === 1 && (n.id === STYLE_ID || n.id === DYNAMIC_ID);
+      const ours = (n) => n.nodeType === 1 && OWN_IDS.has(n.id);
       this.observer = new this.win.MutationObserver((records) => {
-        let sheets = false, dynamic = false;
+        let sheets = false, dynamic = false, added = 0;
         for (const r of records) {
           if (r.type === "attributes") {
             if (r.target === this.doc.documentElement && r.attributeName === GATE_ATTR) {
@@ -691,6 +758,7 @@
               if (isSheetNode(n) || n.querySelector("style,link[rel~=stylesheet]")) sheets = true;
               if (this.scanElements(n)) dynamic = true;
               this.discoverShadows(n);
+              added++;
             }
             for (const n of r.removedNodes) {
               if (ours(n)) { sheets = dynamic = true; continue; }
@@ -699,9 +767,10 @@
           }
         }
         if (sheets || dynamic) this.schedule({ sheets, dynamic });
+        if (added > 20 && !this.shadow) this.scheduleSafetyNet(1000);
       });
       this.observer.observe(this.root, {
-        childList: true, subtree: true, characterData: true, attributes: true,
+        childList: true, subtree: true, attributes: true,
         attributeFilter: ["style", "bgcolor", "color", "text", "fill", "stroke", GATE_ATTR],
       });
       if (!this.listening) {
@@ -710,8 +779,20 @@
         this.root.addEventListener("load", (e) => { if (this.active && e.target.localName === "link") this.schedule({ sheets: true }); }, true);
       }
       // Rules added with insertRule() (CSS-in-JS) don't show up as DOM mutations.
+      if (this.shadow) return;  // the document's poll covers its shadow roots
       this.poll = setInterval(() => {
         if (!this.active) return;
+        const pollStart = performance.now();
+        try { this.pollOnce(); } finally {
+          const ms = performance.now() - pollStart;
+          this.status.checkMs = Math.round(ms * 10) / 10;
+        }
+      }, 5000);
+    }
+
+    pollOnce() {
+      for (const child of this.children.values()) if (child.active) child.pollOnce();
+      {
         if (!this.shadow || this.root.host.isConnected) this.discoverShadows(this.root);
         if (this.shadow && Object.keys(this.ownSheets).length) this.adoptOwnSheets();
         for (const sheet of this.sheets()) {
@@ -720,14 +801,18 @@
           const cached = this.sheetCache.get(sheet);
           if (!cached || cached.count !== count) { this.schedule({ sheets: true }, 0); return; }
         }
-      }, 1500);
+      }
     }
 
     // Readability safety net --------------------------------------------------------------
 
     scheduleSafetyNet(delay = 1200) {
+      const since = performance.now() - (this.lastNet || -1e9);
       clearTimeout(this.netTimer);
-      this.netTimer = setTimeout(() => this.safetyNet(), delay);
+      this.netTimer = setTimeout(() => {
+        const run = () => { this.lastNet = performance.now(); this.safetyNet(); };
+        if (this.win.requestIdleCallback) this.win.requestIdleCallback(run, { timeout: 2000 }); else run();
+      }, Math.max(delay, 5000 - since));
     }
 
     /**
@@ -736,23 +821,32 @@
      */
     safetyNet() {
       if (!this.active || this.shadow || !this.doc.body) return;
+      const started = performance.now();
+      try { this.safetyNetPass(); } finally { this.status.netMs = Math.round(performance.now() - started); }
+    }
+
+    safetyNetPass() {
       const { doc, win } = this;
       const walker = doc.createTreeWalker(doc.body, win.NodeFilter.SHOW_TEXT);
       const seen = new Set();
       let checked = 0, added = 0, node;
-      while ((node = walker.nextNode()) && checked < 2000) {
+      const bgCache = new Map();
+      while ((node = walker.nextNode()) && checked < 300) {
         if (!node.data.trim()) continue;
         const el = node.parentElement;
         if (!el || seen.has(el) || el.hasAttribute(FIX_ATTR) || el.closest("style,script,noscript,svg")) continue;
         seen.add(el);
         const rect = el.getBoundingClientRect();
-        if (!rect.width || rect.bottom < -400 || rect.top > win.innerHeight * 3) continue;
+        if (!rect.width || rect.bottom < 0 || rect.top > win.innerHeight) continue;  // visible text only
         checked++;
         const cs = win.getComputedStyle(el);
         if (cs.visibility === "hidden" || parseFloat(cs.fontSize) < 6) continue;
         const fg = parseColor(cs.color);
         if (!fg || fg.a < 0.25) continue;
-        const bg = backgroundBehind(el, win);
+        const parent = el.parentElement;
+        let bg = parent && bgCache.has(parent) && !win.getComputedStyle(el).backgroundColor.match(/[1-9]/) ? bgCache.get(parent) : undefined;
+        if (bg === undefined) bg = backgroundBehind(el, win);
+        bgCache.set(el, bg);
         if (!bg) continue;
         if (contrast(blend(fg, bg), bg) >= 2) continue;
         const id = nextId++;

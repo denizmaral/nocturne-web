@@ -1,0 +1,21 @@
+<!doctype html><html><head><meta charset="utf-8"><title>latency</title><style id="sc">body{background:#fff;color:#111}</style></head><body>
+<p>static text</p><div id="root"></div>
+<script>
+// Like styled-components: a rule added with insertRule() plus an element that uses it.
+// Counts frames until the new element is dark (0 or 1 = it never showed up light).
+setTimeout(() => {
+  const sheet = document.getElementById("sc").sheet;
+  sheet.insertRule(".sc-a1{background:#ffffff;color:#222222;padding:8px}", sheet.cssRules.length);
+  const el = document.createElement("div");
+  el.className = "sc-a1"; el.textContent = "content styled by insertRule";
+  document.getElementById("root").appendChild(el);
+  let frames = 0;
+  const check = () => {
+    const [r] = getComputedStyle(el).backgroundColor.match(/\d+/g).map(Number);
+    if (r < 80) { document.documentElement.setAttribute("data-frames", String(frames)); return; }
+    if (++frames > 300) { document.documentElement.setAttribute("data-frames", "never"); return; }
+    requestAnimationFrame(check);
+  };
+  check();
+}, 1000);
+</script></body></html>

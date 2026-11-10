@@ -39,5 +39,7 @@ return (() => {
     gate: document.documentElement.hasAttribute("data-nocturne-web"),
     icon: svg("#icon path"), art: [...document.querySelectorAll("#art rect")].map((r) => rgba(getComputedStyle(r).fill)),
     photoFilter: photo ? getComputedStyle(photo).filter : null,
+    placeholder: !!document.getElementById("nocturne-web-placeholder"),
+    frames: document.documentElement.getAttribute("data-frames"),
   };
 })();

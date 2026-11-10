@@ -13,7 +13,8 @@ const STATUS_TEXT = {
 const STAT_LABELS = [
   ["sheets", "Stylesheets darkened"], ["fetched", "Fetched from other sites"], ["unreadable", "Couldn't be read"],
   ["rules", "Rules copied"], ["variables", "CSS variables"], ["dropped", "Colours skipped"],
-  ["inline", "Inline styles"], ["fixes", "Readability fixes"], ["buildMs", "Build time (ms)"],
+  ["inline", "Inline styles"], ["shadowRoots", "Web components"], ["fixes", "Readability fixes"],
+  ["buildMs", "Build time (ms)"], ["darkAtMs", "Dark after page start (ms)"], ["checkMs", "Background check (ms)"],
 ];
 
 async function main() {

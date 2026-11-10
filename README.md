@@ -16,6 +16,7 @@ Many dark-mode extensions invert or shift every colour on the page, which makes 
 - **The page's own styles stay intact.** Nocturne Web adds a dark copy of the page's colour rules next to them. Hover effects, responsive layouts and themes keep working, and turning it off restores the page instantly.
 - **Readability check.** After darkening a page, it looks for text that became hard to read and fixes it.
 - **Pages that are already dark are left alone.**
+- **Fast.** Pages are dark from the first frame, with no white flash. Styles that web apps add while you use them are converted before they appear on screen.
 
 ## Installation (Zen Browser)
 
@@ -59,7 +60,7 @@ python3 tests/run.py                   # end-to-end tests in headless Zen (needs
 ./scripts/build.sh                     # builds dist/nocturne-web-<version>.xpi
 ```
 
-The end-to-end tests load each page in `tests/pages` twice, without and with the extension. Every piece of text must come out as the exact dark version of its original colours (`src/color.js`), stay readable, and images must stay untouched. The pages cover web components (open, closed, nested, late-defined and slotted), CSS variables (including channel-style variables like Tailwind's and shadcn/ui's), stylesheets from other domains, `@import`, `@layer`, nested CSS, inline styles, SVG, styles added later by scripts, and strict Content Security Policies.
+The end-to-end tests load each page in `tests/pages` twice, without and with the extension. Every piece of text must come out as the exact dark version of its original colours (`src/color.js`), stay readable, and images must stay untouched. One page checks that styles added from JavaScript turn dark before the next frame. The pages cover web components (open, closed, nested, late-defined and slotted), CSS variables (including channel-style variables like Tailwind's and shadcn/ui's), stylesheets from other domains, `@import`, `@layer`, nested CSS, inline styles, SVG, styles added later by scripts, and strict Content Security Policies.
 
 ## Disclaimer
 
